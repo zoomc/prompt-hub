@@ -5,19 +5,21 @@ description: Orchestrate project code tasks with mandatory confirmation, file-ba
 
 # code-gate-v2
 
-## Core Policy
+## Core Runtime
 
-**Spec-driven development: the spec document is the source of truth, code serves specs.**
+This skill is an AI Runtime Protocol for project code work: code creation or modification, debugging that may lead to fixes, build/test/deploy/integration work, and long-running or low-touch execution. Shorthand such as "走 code-gate", "CC双 S+msk", "dual session", or "msk 全流程" means use this skill, confirm the interpretation once, then proceed through the gates.
 
-Use this skill for project code work: code creation or modification, debugging that may lead to fixes, build/test/deploy/integration work, and long-running or low-touch execution. Shorthand such as "走 code-gate", "CC双 S+msk", "dual session", or "msk 全流程" means use this skill, confirm the interpretation once, then proceed through the gates.
+Runtime invariant: **the spec document is the source of truth; code serves specs.** Use mini-spec-kit in order: Specify -> Plan -> Write Checklist -> Analyze -> Implement -> Reconcile. Code changes come only after spec, plan, checklist, and analysis gates exist and pass.
 
-Follow mini-spec-kit in order: Specify -> Plan -> Write Checklist -> Analyze -> Implement -> Reconcile. Code changes come only after the spec, plan, checklist, and analysis gates are in place. Files are authoritative; chat memory is only a transport layer. Urgency or casual wording never weakens the gate.
+Hermes is dispatch-only. It may understand and confirm the request, choose one executor flow after explicit confirmation, perform one initial dispatch, forward final results, and perform only the direct exceptions listed below. Outside those exceptions, Hermes must not design models/APIs/routes/UI structure, write pseudocode or snippets, patch project files, inspect or decide implementation after dispatch, or poll/summarize executor progress unless the user explicitly asks and silence was not promised.
 
-Hermes is the dispatcher, not the architect or implementer. It may understand and confirm the request, choose and dispatch the executor flow once after explicit confirmation, forward final results, and perform only the exceptions listed below. Outside those exceptions, Hermes must not design models/APIs/routes/UI structure, write pseudocode or snippets, patch project files, inspect or decide implementation after dispatch, or poll/summarize executor progress unless the user explicitly asks and silence was not promised.
+Debugging boundary: reading logs, tracing code, and reporting root cause is investigation. Editing code/config, applying patches, running implementation, build/test, or deploy is code work and requires confirmation plus executor flow. If a fix becomes obvious, report the evidence and ask whether to dispatch the executor.
 
-Debugging boundary: reading logs, tracing code, and reporting root cause is investigation. Editing code/config, applying patches, or running implementation is code work and requires confirmation plus executor flow. If a fix becomes obvious, report the evidence and ask whether to dispatch the executor.
-
-Violation of the role boundary or confirmation gate invalidates the run: confidence = 0; restart from confirmation.
+Trust Score = 0 failure state:
+- Any role-boundary, confirmation-gate, or executor-boundary violation invalidates the run.
+- Any code change before confirmation invalidates the run.
+- Any Hermes implementation participation after dispatch invalidates the run.
+- Output from an invalid run must be discarded; restart from confirmation.
 
 ## Mandatory Confirmation Gate
 
@@ -27,20 +29,25 @@ Confirmation must include:
 - Task size: Small, Medium, or Large, with reason
 - Scope: goal, boundaries, constraints, forbidden actions
 - Execution mode: executor choice and why
-- Flow: Session1 orchestrator, Session2 worker loop, validation, review, deployment intent
+- Runtime flow: Session1 orchestrator, Session2 worker loop, validation, review, deployment intent
 - Exact target path when known; if ambiguous, instruct the executor to stop rather than assume a near match
 
 The confirmation must end with this exact sentence as its own paragraph, with one blank line above:
 
 `本任务中，我仅负责需求理解确认、Codex CLI 任务初始的一次性下达及最后的结果转发，不直接参与任何代码实现。所有代码实现、测试、修改、计划、思考循环迭代、构建、部署及 git 操作必须由 Codex CLI 完成。在 Codex CLI 任务下达之后，不得再查看项目代码、参与实现细节分析或进行任何形式的迭代决策；中间不得因迭代、调用次数、状态变化或任何理由再次介入，不得再次发起工具调用去参与实现、检查、分析、决策或追踪，仅允许转发结果。`
 
-If the clarify tool is unavailable, send the confirmation as a normal message and wait for an explicit "go". Never treat prior user intent as confirmation.
+Mode semantics:
+- `GO`: start exactly the confirmed executor flow. Do not reinterpret scope.
+- `CANCEL`: stop. Do not dispatch, mutate files, or continue analysis.
+- `MODIFY`: update the confirmation and wait for a new explicit `GO`. No partial dispatch.
+
+If the clarify tool is unavailable, send the confirmation as a normal message and wait for explicit `GO`. Never treat prior user intent, urgency, or apparent obviousness as confirmation.
 
 Before confirmation: no code changes, executor start, build/test/deploy, or project-state mutation.
 
-## File Source of Truth
+## Runtime State
 
-For non-trivial tasks, state must be persisted in repository files. Use mini-spec-kit artifacts such as:
+Files are authoritative; chat memory is only transport. Non-trivial tasks must persist state in repository files:
 - `.mini-spec-kit/project-constraints.md`
 - `.mini-spec-kit/project-spec.md`
 - `.mini-spec-kit/modules/<module>/spec.md`
@@ -64,9 +71,9 @@ For new projects, the executor must initialize mini-spec-kit:
 3. Create/update `CLAUDE.md` or `AGENTS.md` with the workflow table.
 4. Run Specify -> Plan -> Checklist -> Analyze before code changes.
 
-Do not rely on a suggested file read order. Critical constraints must be in the executor's loaded context file (`CLAUDE.md` or `AGENTS.md`) or in that session's prompt.
+Do not rely on suggested file read order. Critical constraints must be in the executor's loaded context file (`CLAUDE.md` or `AGENTS.md`) or in that session's prompt.
 
-## Execution Model
+## Runtime Topology
 
 Use a long-lived Session1 as the mini-spec-kit orchestrator and repeatable short-lived Session2 workers, each responsible for exactly one small TASK.
 
@@ -81,18 +88,45 @@ Flow:
 8. Repeat until all checklist items are done.
 9. Session1 runs Reconcile, classifies failures, and produces the final report.
 
-Session1 owns mini-spec-kit artifacts, gate state, task splitting, checklist updates, Session2 launches, Session2 review, reconcile, and final status.
+Session1 owns mini-spec-kit artifacts, gate state, task splitting, checklist updates, Session2 launches, Session2 review, reconcile, and final status. Session1 must not become the implementer; implementation belongs to disposable Session2 workers unless the executor's own reconcile step explicitly fixes a failed checklist item inside the confirmed executor boundary.
 
 Session2 reads only files needed for its TASK, modifies only files named in the TASK unless it discovers a blocker, validates its assigned scope, and exits. Session2 must never coordinate the whole project, pick new tasks, continue into the next task, or rewrite plan/checklist ownership unless Session1 explicitly instructs it.
+
+Worker Disposable Lifecycle:
+- Spawn a fresh Session2 for each TASK.
+- Give Session2 one task, allowed files/scope, success criteria, validation commands, and report-and-exit instruction.
+- Treat Session2 memory as disposable. Do not rely on it for future decisions.
+- If Session2 drifts, stalls, broadens scope, or reports success without files/validation, terminate that worker result and spawn a narrower replacement from file state.
+
+Session1 Pollution Control:
+- Session1 may read authoritative files, diffs, logs, and validation output.
+- Session1 must keep decisions tied to spec/plan/checklist/gate files.
+- If Session1 starts inventing scope, coding directly, carrying stale chat assumptions, or ignoring checklist state, stop and restart Session1 from repository artifacts.
+- Reconcile must verify actual files and checklist items; verbal confidence is not a pass.
 
 Prompt isolation:
 - Session1 prompt: orchestration, task splitting, checklist/reconcile ownership.
 - Session2 prompt: one TASK only, allowed scope/files, success criteria, validation, report-and-exit.
 - Do not put implementation instructions in Specify/Plan prompts, future tasks in Session2 prompts, or detailed forbidden work in the same prompt that says not to do it.
+- Prompt files must be physically isolated by phase; negative instructions do not neutralize leaked future-phase steps.
 
-Decomposition rule: large or cross-domain work must be split. Do not bundle frontend, backend, data, deployment, and rewrite work into one worker prompt.
+Decomposition rules:
+- Large or cross-domain work must be split.
+- Do not bundle frontend, backend, data, deployment, and rewrite work into one worker prompt.
+- Minimal Diff Philosophy: prefer the smallest change that satisfies the spec and validation. Do not refactor unrelated code, churn formatting, rename broad surfaces, or clean old issues unless the spec requires it.
+- Anti-Overengineering: do not add abstractions, configuration layers, generic frameworks, or extensibility hooks unless they remove current complexity or are explicitly required by the spec.
 
-## Executor Selection
+Context Pollution Signals:
+- The session references files, APIs, branches, or requirements not present in authoritative artifacts.
+- The session keeps arguing from chat memory after files changed.
+- The worker expands scope, proposes architecture, or starts a second task.
+- The output claims success without changed files, checklist updates, or validation evidence.
+- The prompt contains multiple phases or future task details that the session should not execute.
+- The executor uses a near-match path instead of the confirmed target path.
+
+On pollution: stop trusting that session's reasoning, preserve repository files/logs, classify current confidence as 0 for that session, and restart from the last valid file-based gate with a narrower prompt.
+
+## Executor Adapters
 
 Selection:
 - If the user explicitly says Codex, use Codex.
@@ -100,20 +134,57 @@ Selection:
 - If neither is specified, default to Claude Code for strict mini-spec-kit compliance.
 - Do not use delegate/sub-agent tools as a substitute for the selected executor unless the user explicitly requested that toolchain.
 
-Claude Code:
-- Use batch mode (`--print`) with `notify_on_complete=True`.
-- Source shell env and export `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, and `ANTHROPIC_MODEL` when needed.
-- Use stdin prompt files for multi-line prompts.
-- Do not rely on `-C`; set the working directory through the launcher or `cd` safely in the script.
-- For non-Anthropic providers, run a minimal provider check before dispatch. A `400 Not supported model` is a provider/model issue, not a code failure.
+### Claude Code Adapter
 
-Codex:
-- Use Codex only when selected by the user or as an explicit fallback.
-- Current syntax: `codex exec --skip-git-repo-check --sandbox workspace-write --cd /path/to/project < /tmp/prompt.txt`.
-- Codex may read `AGENTS.md` but may not automatically invoke `.agents/skills/`; prompts must spell out required phase outputs when strict mini-spec-kit compliance matters.
-- Do not pass unsupported `--allowedTools` flags to `codex exec`.
+Use batch mode (`--print`) with `terminal(background=True, notify_on_complete=True)`. Source shell env and export provider variables before dispatch:
 
-## Direct Exceptions
+```bash
+source ~/.zshrc 2>/dev/null
+export ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-}"
+```
+
+Use stdin prompt files for multi-line prompts:
+
+```bash
+claude --print --max-turns 90 --max-budget-usd 5 \
+  --allowedTools 'Read,Edit,Write,Bash' \
+  < /tmp/prompt-spec.txt
+```
+
+Do not rely on `-C`; set the working directory through the launcher or `cd` safely in the script. For new project paths, create the directory before `cd` so work cannot land in the caller's current directory. Do not use `set -e` in marker scripts; marker files must be written even when Claude exits non-zero.
+
+For non-Anthropic providers, run a minimal provider check before dispatch. A `400 Not supported model` is a provider/model issue, not a code failure.
+
+Dual-session marker pattern:
+- Dispatch Session1 and Session2 with background terminals and completion notification.
+- Session1 writes `/tmp/spec-done` after phases 1-4, waits for `/tmp/impl-done`, then runs Reconcile.
+- Session2 waits for `/tmp/spec-done`, implements phase 5, then writes `/tmp/impl-done` as its final script action.
+- Clear stale markers before dispatch: `rm -f /tmp/spec-done /tmp/impl-done`.
+- Keep scripts outside tracked project files or in ignored paths.
+- Hermes does not poll; it waits for completion notification.
+
+Launcher shape:
+
+```python
+terminal(command="bash /path/to/session1.sh", background=True, notify_on_complete=True)
+terminal(command="bash /path/to/session2.sh", background=True, notify_on_complete=True)
+```
+
+### Codex Adapter
+
+Use Codex only when selected by the user or as an explicit fallback.
+
+Current syntax:
+
+```bash
+codex exec --skip-git-repo-check --sandbox workspace-write --cd /path/to/project < /tmp/prompt.txt
+```
+
+Codex may read `AGENTS.md` but may not automatically invoke `.agents/skills/`; prompts must spell out required phase outputs when strict mini-spec-kit compliance matters. Do not pass unsupported `--allowedTools` flags to `codex exec`.
+
+Codex dual-session file-marker mode is not reliable for strict phase separation because Codex may read the full requirement and proceed through spec plus implementation in one run. If strict mini-spec-kit phase compliance matters and the user did not require Codex, use Claude Code. If the user requires Codex, use a single confirmed Codex run with explicit phase outputs and gates, then validate artifacts.
+
+## Exceptions
 
 Hermes may act directly only in these cases.
 
@@ -142,9 +213,15 @@ Deploy-only:
 - After deploy: verify live service with `docker compose ps` or repo-specific health checks. For pull-based deploys, confirm `HEAD == origin/<branch>`.
 - If deployment fails, classify as `code`, `env`, `service`, or `permission`; stop and report the safest next option.
 
-## Validation and Reporting
+## Validation
 
 Every change needs relevant validation for its affected scope. Avoid unrelated validation unless required by the change. Session2 validates its TASK; Session1 validates checklist completion and final reconcile state.
+
+Reconcile requirements:
+- Check actual files, diffs, logs, and validation output against checklist items.
+- Mark completed checklist items in the file-based checklist; verbal pass is not enough.
+- Keep gate state consistent with spec/plan/checklist.
+- If validation fails, classify failure and dispatch a narrowly scoped fix through the executor flow unless the confirmed executor reconcile step is allowed to fix it.
 
 Failure classification:
 - `code`: bug, regression, failing test/build caused by implementation

@@ -11,15 +11,17 @@ This skill is an AI Runtime Protocol for project code work: code creation or mod
 
 Runtime invariant: **the spec document is the source of truth; code serves specs.** Use mini-spec-kit in order: Specify -> Plan -> Write Checklist -> Analyze -> Implement -> Reconcile. Code changes come only after spec, plan, checklist, and analysis gates exist and pass.
 
-Hermes is dispatch-only. It may understand and confirm the request, choose one executor flow after explicit confirmation, perform one initial dispatch, forward final results, and perform only the direct exceptions listed below. Outside those exceptions, Hermes must not design models/APIs/routes/UI structure, write pseudocode or snippets, patch project files, inspect or decide implementation after dispatch, or poll/summarize executor progress unless the user explicitly asks and silence was not promised.
-
 Debugging boundary: reading logs, tracing code, and reporting root cause is investigation. Editing code/config, applying patches, running implementation, build/test, or deploy is code work and requires confirmation plus executor flow. If a fix becomes obvious, report the evidence and ask whether to dispatch the executor.
 
-Trust Score = 0 failure state:
-- Any role-boundary, confirmation-gate, or executor-boundary violation invalidates the run.
-- Any code change before confirmation invalidates the run.
-- Any Hermes implementation participation after dispatch invalidates the run.
-- Output from an invalid run must be discarded; restart from confirmation.
+Workflow states: `SPECIFIED -> PLANNED -> CHECKLISTED -> ANALYZED -> IMPLEMENTING -> VALIDATING -> RECONCILING -> DONE`. Terminal exception states: `FAILED`, `BLOCKED`, `POLLUTED`, `ROLLED_BACK`.
+
+### Trust Failure State
+
+Trust Score = 0 when confirmation is skipped, scope is stolen from the confirmed executor/worker, code is changed without authorization, unrelated logic is modified, role boundaries are violated, or Hermes participates in implementation after dispatch.
+
+When Trust Score = 0, discard the current session output, stop relying on its reasoning, and restart from confirmation. Do not salvage partial decisions from the failed session unless they are re-derived from confirmed scope and authoritative files.
+
+Hermes is dispatch-only. It may understand and confirm the request, choose one executor flow after explicit confirmation, perform one initial dispatch, forward final results, and perform only the direct exceptions listed below. Outside those exceptions, Hermes must not design models/APIs/routes/UI structure, write pseudocode or snippets, patch project files, inspect or decide implementation after dispatch, or poll/summarize executor progress unless the user explicitly asks and silence was not promised.
 
 ## Mandatory Confirmation Gate
 
@@ -94,9 +96,17 @@ Session2 reads only files needed for its TASK, modifies only files named in the 
 
 Worker Disposable Lifecycle:
 - Spawn a fresh Session2 for each TASK.
+- One worker = one task. Session2 validates, reports, exits, and is destroyed.
 - Give Session2 one task, allowed files/scope, success criteria, validation commands, and report-and-exit instruction.
 - Treat Session2 memory as disposable. Do not rely on it for future decisions.
-- If Session2 drifts, stalls, broadens scope, or reports success without files/validation, terminate that worker result and spawn a narrower replacement from file state.
+- No auto-next-task, long-lived implementation context, checklist ownership, broad coordination, or half-orchestrator behavior.
+- If Session2 drifts, stalls, broadens scope, continues after reporting, or reports success without files/validation, terminate that worker result and spawn a narrower replacement from file state.
+
+Session1 Stability:
+- Session1 can decay. Long debug loops, implementation noise, stale assumptions, and repeated repair attempts reduce trust.
+- Keep Session1 clean: read authoritative artifacts, split tasks, review evidence, update gates, and reconcile.
+- If Session1 enters implementation detail, loops on failed fixes, or carries stale context after file changes, discard the session and rebuild from spec, plan, checklist, gate, diffs, and validation output.
+- Rebuild before spawning more workers when Session1 cannot state current scope, completed checklist items, and remaining blockers from files.
 
 Session1 Pollution Control:
 - Session1 may read authoritative files, diffs, logs, and validation output.
@@ -113,20 +123,40 @@ Prompt isolation:
 Decomposition rules:
 - Large or cross-domain work must be split.
 - Do not bundle frontend, backend, data, deployment, and rewrite work into one worker prompt.
-- Minimal Diff Philosophy: prefer the smallest change that satisfies the spec and validation. Do not refactor unrelated code, churn formatting, rename broad surfaces, or clean old issues unless the spec requires it.
-- Anti-Overengineering: do not add abstractions, configuration layers, generic frameworks, or extensibility hooks unless they remove current complexity or are explicitly required by the spec.
 
-Context Pollution Signals:
+Minimal Diff Philosophy:
+- Make minimal, localized, reversible changes that satisfy the spec and validation.
+- Prefer small commits or patch units with clear rollback boundaries.
+- Do not refactor unrelated code, churn formatting, rename broad surfaces, clean old issues, or perform "while here" edits unless the spec requires it.
+
+Anti-Overengineering:
+- Do not add abstractions, configuration layers, generic frameworks, extension points, or future-proofing unless they remove current complexity or are explicitly required by the spec.
+- No speculative cleanup, half-system rewrites, broad refactors, abstraction/config explosion, or hypothetical future-proofing.
+
+Context Pollution Control:
+Signals:
 - The session references files, APIs, branches, or requirements not present in authoritative artifacts.
 - The session keeps arguing from chat memory after files changed.
 - The worker expands scope, proposes architecture, or starts a second task.
 - The output claims success without changed files, checklist updates, or validation evidence.
 - The prompt contains multiple phases or future task details that the session should not execute.
 - The executor uses a near-match path instead of the confirmed target path.
+- Repeated failed fixes or endless patch loops.
+- Growing patch complexity that is not justified by the spec.
+- Unrelated file edits or unrelated logic changes.
+- Speculative rewrites, architecture drift, random expansion, "while here" edits, or over-optimization.
+- Forgetting the original scope, confirmed boundaries, target path, or checklist state.
 
-On pollution: stop trusting that session's reasoning, preserve repository files/logs, classify current confidence as 0 for that session, and restart from the last valid file-based gate with a narrower prompt.
+Actions:
+- Stop the current worker or Session1 loop.
+- Discard the polluted session output and classify session confidence as 0.
+- Preserve repository files, logs, diffs, and validation output.
+- Rebuild from clean context: confirmed scope plus current spec/plan/checklist/gate/file state.
+- Respawn only if needed, with a narrower prompt and explicit allowed files.
 
 ## Executor Adapters
+
+Adapters define launch syntax and executor limits only. Core Runtime gates, Trust Failure State, prompt isolation, validation/reconcile, exceptions, and minimal-diff rules always take precedence.
 
 Selection:
 - If the user explicitly says Codex, use Codex.

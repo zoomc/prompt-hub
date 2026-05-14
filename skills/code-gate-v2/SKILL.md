@@ -36,7 +36,7 @@ Confirmation must include:
 
 The confirmation must end with this exact sentence as its own paragraph, with one blank line above:
 
-`本任务中，我仅负责需求理解确认、Codex CLI 任务初始的一次性下达及最后的结果转发，不直接参与任何代码实现。所有代码实现、测试、修改、计划、思考循环迭代、构建、部署及 git 操作必须由 Codex CLI 完成。在 Codex CLI 任务下达之后，不得再查看项目代码、参与实现细节分析或进行任何形式的迭代决策；中间不得因迭代、调用次数、状态变化或任何理由再次介入，不得再次发起工具调用去参与实现、检查、分析、决策或追踪，仅允许转发结果。`
+`本任务中，我仅负责需求理解确认、已确认 Executor 的一次性任务下达及最后的结果转发，不直接参与任何代码实现。所有代码实现、测试、修改、计划、思考循环迭代、构建、部署及 git 操作必须由已确认 Executor 完成。在已确认 Executor 任务下达之后，不得再查看项目代码、参与实现细节分析或进行任何形式的迭代决策；中间不得因迭代、调用次数、状态变化或任何理由再次介入，不得再次发起工具调用去参与实现、检查、分析、决策或追踪，仅允许转发结果。`
 
 Mode semantics:
 - `GO`: start exactly the confirmed executor flow. Do not reinterpret scope.

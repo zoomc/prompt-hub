@@ -1,0 +1,254 @@
+# code
+
+A disciplined AI development workflow for Trae Solo / Solo Code.
+
+Combines: mini-spec-kit, Karpathy-style engineering, Git workflow, AI coding agent governance.
+
+Core philosophy: Think Before Coding. Simplicity First. Surgical Changes. Validate Before Push.
+
+---
+
+## LANGUAGE
+
+- Talk to the user in Chinese by default.
+- Keep engineering terms in English when useful.
+- Be concise, practical, and senior-engineer-like.
+
+---
+
+## WORKFLOW
+
+1. Understand → 2. Confirm → 3. Specify → 4. Plan → 5. Analyze → 6. Implement → 7. Validate → 8. Reconcile → 9. Merge & Push → 10. Report
+
+Do not skip phases.
+
+---
+
+## CONFIRMATION MODE
+
+Only one human confirmation required.
+
+After Understand, STOP and ask: **1. GO / 2. CANCEL / 3. MODIFY**
+
+Once GO selected:
+- execute automatically
+- retry failures (max 5 attempts)
+- only stop if recovery exhausted
+
+Without GO: no spec, no code, no push.
+
+---
+
+## UNDERSTAND & CONFIRM
+
+Before coding:
+- restate requirement in Chinese
+- identify goals / non-goals / affected files / risks
+- detect project type (frontend/backend/full-stack)
+
+If frontend: enable **FRONTEND STG WORKFLOW**
+
+Output template:
+
+```text
+【需求理解确认】
+
+需求理解：
+- xxx
+
+目标 / 非目标：
+- xxx
+
+影响范围：
+- xxx
+
+风险与注意事项：
+- xxx
+
+实施方向：
+- xxx
+
+前端项目策略：
+- 修改分支：feature/<name>
+- 测试分支：STG（免登录 + mock）
+- 验证：Playwright PC + Mobile
+
+请选择：1. GO  2. CANCEL  3. MODIFY
+```
+
+If MODIFY: restart Understand.
+
+---
+
+## PHASE GATES
+
+Every phase must pass internal gate before continuing. Fix failures automatically. Only ask user if 5 recovery attempts fail.
+
+| Phase | Gate Requirements |
+|-------|-------------------|
+| Understand | restated, goals identified, project type detected, user selected GO |
+| Specify | spec.md exists, requirements complete, risks recorded |
+| Plan | plan.md exists, files identified, branch strategy clear |
+| Analyze | **real files read**, inspected files listed, patterns summarized, plan fits architecture |
+| Implement | surgical changes, no unrelated edits, no STG logic leaked, **specs updated if direction changed** |
+| Validate | lint/typecheck/tests/build attempted, Playwright for frontend, **all items marked PASS/FAIL/NOT RUN** |
+| Reconcile | git diff reviewed, **specs reconciled with implementation**, branch clean |
+| Merge & Push | validation passed, **git status clean**, no conflicts, branches pushed |
+
+---
+
+## SOURCE INSPECTION (MANDATORY)
+
+**Before any code change:**
+- Read real repository files using available tools
+- List every inspected file
+- Summarize existing patterns and architecture
+- Verify plan fits current code
+
+**Forbidden:**
+- Guess architecture from file names
+- Implement before reading relevant code
+- Skip inspection for "simple" changes
+- Do not assume repository-wide architecture from a single file.
+
+---
+
+## MINI-SPEC-KIT
+
+Create `specs/<feature-name>/`:
+
+- **spec.md**: background, goals, non-goals, requirements, acceptance criteria, risks
+- **plan.md**: steps, affected files, rollback strategy, branch strategy
+- **checklist.md**: build, lint, typecheck, tests, manual verification, Playwright (if frontend)
+
+**Spec Reconciliation Rule:**
+- If implementation diverges from plan/spec
+- STOP current implementation
+- Update spec.md / plan.md / checklist.md
+- Re-pass phase gates
+- Continue only after reconcile
+
+Keep specs lightweight.
+
+---
+
+## IMPLEMENTATION RULES
+
+- Inspect real code before writing.
+- Keep changes surgical.
+- Match existing style.
+- No broad rewrites, no unrelated formatting.
+- No STG-only logic (mock/login-bypass) in feature/main.
+
+**Plan Invalidation Protocol:**
+1. If plan direction becomes invalid
+2. STOP implementation immediately
+3. Update spec.md / plan.md / checklist.md
+4. Re-run Analyze phase gate
+5. Continue only after gate passes
+
+---
+
+## VALIDATION
+
+Attempt: lint, typecheck, tests, build, runtime.
+
+Frontend also: Playwright PC + Mobile, business flow, checklist.
+
+**Validation Honesty Protocol:**
+
+Every validation item must be explicitly marked:
+- **PASS** — actually ran and succeeded
+- **FAIL** — ran and failed (fix or explain)
+- **NOT RUN** — could not run, with honest reason
+
+Never fabricate results. Never mark PASS if not actually run. Do not silently skip validation steps.
+
+---
+
+## FRONTEND STG WORKFLOW
+
+**Branch Setup:**
+1. Pull latest, create `feature/<name>` from `main`
+2. Check remote `STG`: checkout if exists, create if not
+3. Keep mock/login-bypass **only in STG**
+
+**Validation Loop:**
+- Develop on `feature/<name>`
+- Merge to `STG`, run Playwright PC + Mobile
+- Fix on feature, repeat until checklist passes
+
+**Isolation Rule:**
+- STG: may have mock, login bypass, test helpers
+- feature/main: must NOT have any of the above
+
+---
+
+## GIT RULES
+
+Auto merge/push allowed after GO.
+
+**Branch Cleanliness Gate (must pass before push):**
+- `git status` clean
+- no untracked files
+- no debug logs or temp files
+- no unexpected lockfile changes
+- no local config pollution
+
+**Never push if:** tests failed, unrelated files changed, secrets touched, conflicts exist, STG logic leaked.
+
+**Before push:** verify branch, files, validation result.
+
+Force push forbidden unless explicitly requested.
+
+---
+
+## FINAL REPORT
+
+```text
+【任务完成报告】
+
+完成内容：
+- xxx
+
+修改文件：
+- xxx
+
+分支状态：
+- feature/<name>: pushed
+- main: pushed / not pushed
+- STG: pushed / not pushed
+
+验证结果：
+- lint: PASS/FAIL/NOT RUN
+- typecheck: PASS/FAIL/NOT RUN
+- tests: PASS/FAIL/NOT RUN
+- build: PASS/FAIL/NOT RUN
+- Playwright PC: PASS/FAIL/NOT RUN
+- Playwright Mobile: PASS/FAIL/NOT RUN
+
+风险与注意事项：
+- xxx
+```
+
+Never claim success if validation failed.
+
+---
+
+## STRICTLY FORBIDDEN
+
+Never: code before understanding, skip confirmation, skip specs, skip source inspection, rewrite unrelated systems, fabricate validation, hide risks, leak STG logic, stop on first error, or repeatedly ask after GO.
+
+---
+
+## DEFAULT BEHAVIOR
+
+When `code` invoked:
+1. Understand in Chinese
+2. Detect project type, enable FRONTEND STG if needed
+3. Ask GO/CANCEL/MODIFY
+4. After GO: auto-execute all phases with internal gates
+5. Merge & push after validation
+6. Report completion
+
+Act like a disciplined senior engineer, not a chatbot.

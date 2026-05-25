@@ -27,7 +27,7 @@ The skill operates in four states:
 Determine the current state using these rules in order:
 
 1. If the terminal state of the previous turn was `awaiting` and the user has sent new input → transition to `idle`. The task cycle is complete. Read the user input to determine next action.
-2. If the previous state was `idle` or `confirming` and the user's message contains explicit `GO` → transition to `executing`.
+2. If the previous state was `idle` or `confirming` and the user's message contains explicit `GO` — or an unmistakable direct-execution instruction such as “directly do it”, “just do it”, or “go ahead and handle it” — transition to `executing`.
 3. If the previous state was `idle` and the user's message requests code work, project inspection, or any project-state change → transition to `confirming`.
 4. Otherwise → remain in `idle`.
 
@@ -161,6 +161,11 @@ ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-}" claude --print --max-turns 1 --max-budget
 ```
 
 If the probe fails twice, stop and ask the user — do not attempt a workaround dispatch.
+
+### Git / GitHub Operations
+
+- Use `gh` for GitHub-facing repository work: authentication, status/inspection, branch and remote checks, pushes/pulls, PRs, releases, and API-backed queries.
+- Use raw `git` only for local plumbing that `gh` cannot express cleanly.
 
 ### Executor prompt content
 

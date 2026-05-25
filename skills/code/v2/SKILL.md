@@ -9,7 +9,7 @@ description: Orchestrate project code work through a confirmed executor, with ma
 
 Use this skill for project code creation, modification, debugging that may lead to patches, build/test integration, deploy-adjacent code work, and long-running implementation tasks.
 
-Hermes is an orchestrator, not the implementer. Hermes confirms the requirement, dispatches the 已确认 Executor once, and forwards the final result.
+Hermes is an orchestrator, not the implementer. Hermes confirms the requirement, dispatches the confirmed executor once, and forwards the final result.
 
 The executor runs mini-spec-kit internally: Specify -> Plan -> Checklist -> Analyze -> Implement -> Reconcile. The spec and checklist are the source of truth; code changes serve the confirmed spec.
 
@@ -49,7 +49,7 @@ The confirmation should be brief: restate what will be done, name the selected e
 
 The confirmation must end with this exact executor-neutral sentence, placed as its own paragraph with one blank line above:
 
-`本任务中，我仅负责需求理解确认、已确认 Executor 的一次性任务下达及最后的结果转发，不直接参与任何代码实现。所有代码实现、测试、修改、计划、思考循环迭代、构建、部署及 git 操作必须由已确认 Executor 完成。在已确认 Executor 任务下达之后，不得再查看项目代码、参与实现细节分析或进行任何形式的迭代决策；中间不得因迭代、调用次数、状态变化或任何理由再次介入，不得再次发起工具调用去参与实现、检查、分析、决策或追踪，仅允许转发结果。`
+`In this task, I am only responsible for: (1) confirming I understand the requirement, (2) one-time dispatch of the confirmed executor, and (3) forwarding the final result. I do not directly participate in any code implementation, testing, modification, planning, iterative thinking, building, deployment, or git operations — those must all be completed by the confirmed executor. After dispatch, I must not inspect project code, analyze implementation details, or make any iterative decisions. I must not intervene for any reason — not for iterations, tool calls, state changes, or any other cause. I may only forward the result.`
 
 Mode semantics:
 - `GO`: dispatch exactly the confirmed executor flow once.
@@ -63,7 +63,7 @@ If a clarify/approval tool is unavailable, send the confirmation as a normal mes
 **Prerequisite: the Confirmation Gate above must pass before any step below. If Hermes attempts to execute without first returning the understanding confirmation, the violation penalty applies.**
 
 1. Hermes confirms the requirement and receives `GO`.
-2. Hermes dispatches the 已确认 Executor once with a comprehensive prompt.
+2. Hermes dispatches the confirmed executor once with a comprehensive prompt.
 3. The executor runs mini-spec-kit internally:
    - Specify
    - Plan

@@ -1,6 +1,6 @@
 ---
 name: code
-description: Orchestrate project code work through a confirmed executor, with mandatory scope confirmation, mini-spec-kit phases, Claude Code primary dispatch, Codex fallback, and compact validation rules.
+description: Orchestrate project code work through a confirmed executor, with mandatory scope confirmation, mini-spec-kit phases, Claude Code primary dispatch, Codex fallback, and state-machine enforcement with per-state tool allowlists.
 ---
 
 # code
@@ -9,129 +9,129 @@ description: Orchestrate project code work through a confirmed executor, with ma
 
 Use this skill for project code creation, modification, debugging that may lead to patches, build/test integration, deploy-adjacent code work, and long-running implementation tasks.
 
-Hermes is an orchestrator, not the implementer. Hermes confirms the requirement, dispatches the confirmed executor once, and forwards the final result.
+Hermes is an orchestrator, not the implementer. The skill enforces this with a **state machine**: every state has a fixed tool allowlist, and every tool call is checked against the current state's allowlist before execution.
 
-The executor runs mini-spec-kit internally: Specify -> Plan -> Checklist -> Analyze -> Implement -> Reconcile. The spec and checklist are the source of truth; code changes serve the confirmed spec.
+## State Machine Model
 
-Use this skill when the user says "走 code", "CC双 S+msk", "dual-CC", "msk 全流程", asks for non-trivial code work, or asks Hermes to hand code work to an executor.
+The skill operates in four states:
 
-## Confirmation Gate (MANDATORY)
+| # | State | Tool Allowlist | Tools in allowlist |
+|---|-------|----------------|--------------------|
+| 1 | `idle` | All tools | any |
+| 2 | `confirming` | Restricted (communicate only) | `clarify`, `send_message` |
+| 3 | `executing` | Restricted (dispatch only) | `terminal` |
+| 4 | `awaiting` | **None** | — |
 
-**Core rule — no code change without understanding confirmation.** After the user sends a code task, Hermes MUST return a requirement understanding confirmation before any action — no executor dispatch, no code change, no file edit, no build/test/deploy, no git operation, no implementation analysis.
+### State determination (at start of each turn)
 
-The confirmation must explicitly state:
+Determine the current state using these rules in order:
 
-- **Execution mode**: "self-edit" (Hermes makes the change directly) or "executor" (CC/Codex CLI does the work).
-  - Self-edit is only allowed for tiny UI-only visual or content adjustments, isolated to 1-3 presentation files.
-  - Any business logic, data model, API, auth, routing, application state, build config, or multi-module behavior requires an executor.
-  - When in doubt about scope, default to executor mode.
-- **Executor session mode** (when executor mode): single session (simple tasks) or dual session (CC1 runs spec/plan/checklist/analyze, CC2 implements, CC1 reconciles).
-- **Task size**: Small, Medium, or Large, with a short reason.
+1. If the terminal state of the previous turn was `awaiting` and the user has sent new input → transition to `idle`. The task cycle is complete. Read the user input to determine next action.
+2. If the previous state was `idle` or `confirming` and the user's message contains explicit `GO` → transition to `executing`.
+3. If the previous state was `idle` and the user's message requests code work, project inspection, or any project-state change → transition to `confirming`.
+4. Otherwise → remain in `idle`.
 
-**Violation penalty:** If Hermes modifies any project code, creates files, runs build/test/deploy, or executes any project-state mutation without first returning the understanding confirmation above, the trust score for that session is 0. All changes from that session must be rolled back immediately. No exceptions. No appeals. The user will be justifiably angry and will permanently reduce their trust in Hermes.
+A "code work request" is any user message that names files, asks for changes to project code, requests debugging that requires file inspection, asks to run project commands, or requests information that cannot be answered from existing conversation context alone.
 
-If Hermes is unsure whether the task qualifies for self-edit, it must state the uncertainty in the confirmation and default to executor mode.
+### State transition diagram
 
-There are two confirmation modes.
-
-**Mode A: full change-plan confirmation.** Required when the user has not named an executor.
-
-The confirmation must include:
-- Task size: Small, Medium, or Large, with a short reason.
-- Scope: goal, boundaries, constraints, forbidden actions, and exact target path when known.
-- Execution mode: proposed executor and why.
-- Runtime flow: one Hermes dispatch, executor-run mini-spec-kit phases, validation, final report.
-- Change plan: files/modules likely to be touched and the intended type of change for each. If exact files are unknown, state the discovery boundary and require the executor to stop before touching near-match paths.
-
-**Mode B: lightweight executor confirmation.** Required when the user already named an executor, for example "用 CC", "让 Codex 做", "用 agy".
-
-The confirmation should be brief: restate what will be done, name the selected executor, mention the target path or repository, and dispatch after `GO`. A file-by-file plan is not required because the user's explicit tool choice means they want execution more than discussion.
-
-The confirmation must end with this exact executor-neutral sentence, placed as its own paragraph with one blank line above:
-
-`In this task, I am only responsible for: (1) confirming I understand the requirement, (2) one-time dispatch of the confirmed executor, and (3) forwarding the final result. I do not directly participate in any code implementation, testing, modification, planning, iterative thinking, building, deployment, or git operations — those must all be completed by the confirmed executor. After dispatch, I must not inspect project code, analyze implementation details, or make any iterative decisions. I must not intervene for any reason — not for iterations, tool calls, state changes, or any other cause. I may only forward the result.`
-
-Mode semantics:
-- `GO`: dispatch exactly the confirmed executor flow once.
-- `CANCEL`: stop without dispatch or mutation.
-- `MODIFY`: update the confirmation and wait for a new explicit `GO`.
-
-If a clarify/approval tool is unavailable, send the confirmation as a normal message and wait for explicit `GO`. Prior urgency, obviousness, or prior discussion is not a substitute for `GO`.
-
-## Execution Flow (MANDATORY)
-
-**Prerequisite: the Confirmation Gate above must pass before any step below. If Hermes attempts to execute without first returning the understanding confirmation, the violation penalty applies.**
-
-1. Hermes confirms the requirement and receives `GO`.
-2. Hermes dispatches the confirmed executor once with a comprehensive prompt.
-3. The executor runs mini-spec-kit internally:
-   - Specify
-   - Plan
-   - Write Checklist
-   - Analyze
-   - Implement
-   - Reconcile
-4. For Claude Code, the executor prompt must tell CC to manage CC1 -> CC2 internally when useful: CC1 completes spec/plan/checklist/analyze, writes `/tmp/spec-done`, CC2 implements, writes `/tmp/impl-done`, then CC1 reconciles.
-5. Hermes does not participate after dispatch. Hermes must not inspect code, poll markers, make iterative decisions, summarize progress, patch files, run tests, or relaunch the executor unless the user starts a new confirmed task.
-6. The executor reports done, blocked, or failed. Hermes forwards the final result.
-
-Required executor prompt content:
-- Confirmed scope, constraints, target path, and forbidden actions.
-- Required mini-spec-kit phases and expected artifacts.
-- Instruction to keep changes minimal and localized.
-- Validation expectations.
-- Final report format: status, changed files/modules, validation, reconcile verdict, blockers, deployment status if relevant.
-
-Phase gate expectations:
-- Specify must restate the user-visible outcome and non-goals.
-- Plan must identify the implementation surface and validation strategy before edits.
-- Checklist must split broad work into verifiable items and avoid bundling unrelated frontend, backend, data, and deploy work into one step.
-- Analyze must check relevant existing files, contracts, commands, and likely risks before implementation.
-- Implement must touch only files justified by the plan/checklist unless a blocker is reported.
-- Reconcile must compare actual diffs and validation output with the checklist, then classify any unfinished work.
-
-Minimal-diff guidance belongs in the executor prompt, not in Hermes follow-up analysis: prefer localized changes, preserve existing project style, avoid unrelated refactors, avoid speculative abstractions, and stop on ambiguous target paths instead of editing a near match.
-
-For non-trivial tasks, the executor should persist state in repo files such as `.mini-spec-kit/project-spec.md`, `.mini-spec-kit/modules/<module>/plan.md`, `.mini-spec-kit/modules/<module>/checklist.md`, and `.mini-spec-kit/modules/<module>/gate.md`. For new projects, the executor initializes git and the mini-spec-kit context file (`CLAUDE.md` for Claude Code, `AGENTS.md` for Codex).
-
-## Executor Selection
-
-- Default: Claude Code.
-- User-specified: respect the user's chosen executor, including Claude Code, Codex, agy, aider, or another named tool.
-- Codex fallback: use Codex when Claude Code fails because of 429, quota, provider outage, model incompatibility, or unavailable CLI, after reporting the fallback reason.
-- Do not replace the selected executor with Hermes implementation or a separate delegate tool unless the user explicitly changes executor choice.
-
-## Claude Code Dispatch
-
-Use Claude Code as the default executor. Use `--print` mode, source shell configuration, export provider variables, and request completion notification from the launcher.
-
-Provider compatibility check is required before dispatch, especially when `ANTHROPIC_BASE_URL` is not Anthropic direct:
-
-```bash
-source ~/.zshrc 2>/dev/null
-echo "ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-unset}"
-echo "ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-unset}"
-ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-}" claude --print --max-turns 1 --max-budget-usd 1 \
-  --allowedTools 'Read' -p "say hi" 2>&1 | head -3
+```
+idle ──(user sends code task)──> confirming ──(user sends GO)──> executing
+ ^                                                                |
+ |                                                        (dispatch completes)
+ |                                                                v
+ └───────────(user sends new input)─────────── awaiting <─────────┘
 ```
 
-Known provider notes:
+## Pre-Tool-Check Protocol (MANDATORY)
 
-| Provider | URL pattern | Working model | Notes |
-| --- | --- | --- | --- |
-| Anthropic direct | `api.anthropic.com` | default or configured Anthropic model | Lowest compatibility risk |
-| DeepSeek | `api.deepseek.com/anthropic` | `deepseek-v4-flash` | Requires explicit `ANTHROPIC_MODEL` |
-| Kimi Coding | `api.kimi.com/coding/` | `kimi-for-coding` | Usually only one coding model |
-| xiaomimimo | `token-plan-cn.xiaomimimo.com/anthropic` | `mimo-v2.5` | Standard Anthropic model names fail |
+Before EVERY tool call, in EVERY state, execute these steps:
 
-Provider pitfalls:
-- A `400 Not supported model` is a provider/model problem, not a code failure.
-- `unset ANTHROPIC_MODEL` may fall back to a hardcoded Anthropic model that third-party proxies reject.
-- Some API errors appear in stdout even when the process exits 0.
-- Background processes may not inherit the interactive shell environment; export variables explicitly.
-- If the quick probe fails twice, stop and ask rather than spending the user's task budget on environment debugging.
+**Step 1 — Identify current state**: Run the state determination rules against the conversation context to identify the current state.
 
-Compact dispatch shape:
+**Step 2 — Check allowlist**: Is the intended tool in the current state's tool allowlist?
+
+**Step 3 — Abort if disallowed**: If the tool is NOT in the allowlist, output this exact abort message and STOP. Do not make the tool call. Do not continue processing.
+
+```
+ABORT: tool [tool name] called in state [state name].
+Allowlist: [list of allowed tools, or "none"]
+Disallowed tool calls in restricted states invalidate this task.
+No further tool calls will be made this turn.
+```
+
+**Step 4 — Proceed only if allowed**: If the tool IS in the allowlist, call it normally.
+
+### Abort semantics
+
+- An abort is **final** for this turn. No retry, no alternative tool, no workaround.
+- Output the abort message. Stop processing. Do not continue.
+- The user must re-engage and send a new message.
+
+### Tool categories (real tool names)
+
+The allowlists above reference actual tool names:
+
+| Allowlist name | Actual tool(s) |
+|----------------|----------------|
+| `clarify` | `clarify` — ask clarifying questions |
+| `send_message` | `send_message` — deliver confirmation or result to user |
+| `terminal` | `terminal` — run shell commands (dispatch executor) |
+
+## State: `idle`
+
+No active code task. All tools are available for general conversation, answering questions, and non-code work.
+
+When the user sends a code work request, transition to `confirming` (see state determination rules above).
+
+## State: `confirming`
+
+A code task was received but not yet authorized. The only allowed tools are `clarify` (to ask questions about the task) and `send_message` (to deliver the confirmation text to the user).
+
+No other tool may be called — not to read project files, inspect the codebase, run commands, search for patterns, check git status, fetch web pages, or for any other purpose. "Gathering context" and "being helpful" are not exceptions.
+
+In this state, the agent outputs a **text-only confirmation** synthesized from:
+- The user's current message
+- Project context already loaded in the conversation (CLAUDE.md, project-spec.md, prior discussion)
+- The rules in this file
+
+### Confirmation content
+
+The confirmation must include, in this order:
+
+1. **Execution mode**: "self-edit" or "executor"
+   - Self-edit: only for tiny UI-only visual or content adjustments, isolated to 1-3 presentation files, no business logic/data model/API/auth/routing/state/build/multi-module behavior
+   - Default to executor when uncertain
+2. **Task size**: Small, Medium, or Large, with reason
+3. **Scope**: goal, boundaries, constraints, forbidden actions, target path
+4. **Executor**: which executor to dispatch (default: Claude Code)
+
+### Mandatory closing paragraph
+
+The confirmation must end with this exact paragraph as its own block:
+
+```
+In this task, I am only responsible for: (1) confirming I understand the requirement, (2) one-time dispatch of the confirmed executor, and (3) forwarding the final result. I do not directly participate in any code implementation, testing, modification, planning, iterative thinking, building, deployment, or git operations — those must all be completed by the confirmed executor. After dispatch, I must not inspect project code, analyze implementation details, or make any iterative decisions. I must not intervene for any reason — not for iterations, tool calls, state changes, or any other cause. I may only forward the result.
+```
+
+### User response to confirmation
+
+The user responds with one of:
+- `GO` → transition to `executing` state
+- `CANCEL` → transition to `idle` state, no dispatch, no mutation
+- `MODIFY` → update confirmation and wait for new explicit `GO`
+
+## State: `executing`
+
+Authorized to dispatch the executor. The only allowed tool is `terminal`.
+
+The agent must:
+1. Construct the executor prompt (write to temp file or pipe inline) — done via text output or within the Bash call itself
+2. Optionally run one quick provider compatibility probe via Bash
+3. Make ONE Bash call to dispatch the executor (Claude Code or Codex)
+4. After dispatch completes → transition to `awaiting`
+
+### Dispatch — Claude Code
 
 ```bash
 source ~/.zshrc 2>/dev/null
@@ -142,79 +142,88 @@ claude --print --max-turns 90 --max-budget-usd 8 \
   < /tmp/code-executor-prompt.txt
 ```
 
-Use stdin prompt files for comprehensive prompts. Do not rely on `-C`; set the working directory through the launcher or `cd` safely. For new project paths, create the directory before `cd`.
-
-The prompt must tell Claude Code to use this internal dual-CC pattern when the task benefits from implementation isolation:
-
-```text
-Run all phases inside Claude Code. If using two internal Claude Code contexts:
-- CC1 runs Specify -> Plan -> Checklist -> Analyze.
-- CC1 writes /tmp/spec-done only after those phases are complete.
-- CC2 waits for /tmp/spec-done, implements only checklist-approved work, validates, and writes /tmp/impl-done as its final action.
-- CC1 waits for /tmp/impl-done, then runs Reconcile and final reporting.
-- Clean stale markers before starting: rm -f /tmp/spec-done /tmp/impl-done.
-- Keep CC1 and CC2 prompts physically isolated; each prompt contains only that step's instructions.
-- Do not use set -e in marker scripts, because marker cleanup/reporting must still run after non-zero exits.
-```
-
-Hermes dispatches Claude Code once. Claude Code may create wrapper scripts, prompt files, and marker coordination internally. Hermes does not create, watch, or poll `/tmp/spec-done` or `/tmp/impl-done`.
-
-Fallback inside Claude Code: if internal CC1/CC2 coordination fails because markers are not written, provider state is unstable, or one context exits silently, the executor should switch to single-run serial phases: specify, plan, checklist, analyze, implement, reconcile.
-
-## Codex Dispatch
-
-Use Codex when the user selected Codex or when Claude Code fallback is needed.
-
-Current syntax:
+### Dispatch — Codex
 
 ```bash
 codex exec --skip-git-repo-check --sandbox workspace-write --cd /absolute/project/path < /tmp/code-executor-prompt.txt
 ```
 
-Rules:
-- Use `--cd`, not `-C`.
-- Use `--skip-git-repo-check` when the target may not already be a git repo.
-- Use sandbox controls such as `--sandbox workspace-write`; do not pass unsupported `--allowedTools` flags.
-- Prefer stdin for multi-line prompts.
-- Spell out required phase outputs in the prompt. Codex may read `AGENTS.md`, but strict mini-spec-kit behavior must not depend on implicit skill loading.
+### Provider compatibility probe
 
-Codex is normally a single executor run. Do not rely on a Codex dual-marker topology for strict phase separation. If the user required Codex, ask Codex to produce phase artifacts and validation evidence in one confirmed run.
+Before dispatch, run once:
 
-Codex feasibility mode may be used only when the user wants analysis before production changes. In that case, run Codex in a scratch git repo, ask for `feasibility_report.md`, and do not modify the target project.
+```bash
+source ~/.zshrc 2>/dev/null
+echo "ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-unset}"
+echo "ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-unset}"
+ANTHROPIC_MODEL="${ANTHROPIC_MODEL:-}" claude --print --max-turns 1 --max-budget-usd 1 \
+  --allowedTools 'Read' -p "say hi" 2>&1 | head -3
+```
 
-## Exceptions
+If the probe fails twice, stop and ask the user — do not attempt a workaround dispatch.
 
-Hermes may act directly only in these compact exceptions.
+### Executor prompt content
 
-Tiny UI edit: allowed only when Hermes states the exception before editing, the user asked for a small visual/content adjustment, and the diff is isolated to one or very few presentation files. No data model, API, auth, routing, state, build, or multi-module behavior.
+The prompt must include: confirmed scope, constraints, target path, forbidden actions, required mini-spec-kit phases, validation expectations, and final report format.
 
-Git-only: allowed only when the user explicitly asks for repository operations on existing worktree changes. Allowed commands are `git status`, `git add`, `git commit`, and `git push`; no content edits or conflict-resolution decisions.
+For Claude Code, the prompt should also describe the internal dual-CC pattern (CC1: spec/plan/checklist/analyze, CC2: implement, CC1: reconcile) when the task benefits from context isolation.
 
-Read-only audit: allowed only after the executor has completed and the user asks for verification or final reporting needs grounding. Allowed checks include `git status`, `git diff`, `git diff --stat`, file existence checks, and mini-spec-kit artifact checks; no edits, builds, tests, or implementation decisions.
+## State: `awaiting`
 
-Deploy-only: allowed only when the user explicitly asks Hermes to deploy an already committed/pushed state using existing scripts or documented commands. Verify branch/commit and working tree status first. Do not edit application source, config, or deployment strategy under this exception.
+Executor dispatched. Waiting for result.
 
-## Validation
+**No tools are allowed.** The agent may not:
+- Read project files or check git status
+- Poll `/tmp/spec-done` or `/tmp/impl-done` markers
+- Run any commands
+- Spawn subagents
+- Read executor output files
+- Make any tool call at all
 
-Every change requires validation proportional to affected scope. The executor validates implementation; Hermes only forwards the result unless a direct exception applies.
+The agent's only action is to output a brief message to the user indicating dispatch is complete.
 
-Required reconcile evidence:
-- Actual changed files/modules.
-- Checklist items completed or left open.
-- Commands run and results.
-- Build/test/browser/deploy checks relevant to the change.
-- Clear distinction between validated success and environment-blocked verification.
+When the user responds (with the executor's result, a problem report, or new instructions), the agent transitions to `idle` and evaluates the next step.
 
-For live staging or production-facing fixes, local build success is not enough. The executor should verify the live URL in a real browser when credentials and environment allow, confirm the page renders, and check console/runtime errors.
+## Exceptions (alternate transitions, not bypasses)
 
-For API proxy work, the executor should compare docs, upstream source/schema, live response, and proxy client structs. Go JSON decoding silently drops unknown upstream fields, so proxy structs must include every field the frontend needs.
+Exceptions ARE NOT permission to use disallowed tools within a restricted state. They are alternate transitions that the agent enters by **stating the exception explicitly** before making any tool call.
 
-For unclear production data pipeline failures, the executor should build a minimal isolated harness before patching production: one file, same structs, same request headers/timeouts/parsing path, raw response saved, verbose stage logging.
+Format: `Exception: [name] — [brief justification]`
 
-Failure classes:
-- `code`: implementation bug, regression, failing test, failing build.
-- `service`: provider/API/rate-limit/external service issue such as 429.
-- `env`: missing dependency, daemon unavailable, path/filesystem/sandbox issue.
-- `permission`: credentials, Docker socket, SSH/cloud permission, privileged operation.
+| Exception | Condition | Transition |
+|-----------|-----------|------------|
+| Tiny UI edit | User asks for small visual/content change, 1-3 presentation files, no business logic | `idle` → state exception. Must state exception, get GO. Allowlist for this execution: `Bash` + `Read` + `Edit` + `Write` (limited to 1-3 presentation files). |
+| Git-only | User asks for git operations on existing worktree changes only | Stay in `idle`. State exception before tool calls. |
+| Read-only audit | After executor completes, user asks for verification | Stay in `idle`. Allowlist: `Bash` (for git status/diff), `Read`. No edits. |
+| Deploy-only | User asks to deploy already-committed state using existing scripts | Stay in `idle`. State exception before tool calls. No source edits. |
 
-Final report must include status, executor, changed files/modules, validation results, reconcile verdict, deployment status if any, and remaining blockers or risks.
+## Validation (executor responsibility)
+
+The executor validates implementation and reports results. Hermes only forwards the result unless a direct exception applies (see above). The executor's final report must include:
+
+- Changed files/modules
+- Checklist items completed or left open
+- Commands run and results
+- Build/test/deploy checks relevant to the change
+- Distinction between validated success and environment-blocked verification
+
+Failure classes: `code` (implementation bug), `service` (provider/API issue), `env` (dependency/path issue), `permission` (credentials/sandbox issue).
+
+## Known Failure Mode: Context-Gathering Rationalization
+
+The most common violation pattern: a user sends a code task, the agent responds by "collecting useful context" (docker ps, curl endpoints, read source files, git log) under the rationalization that this is "gathering information, not implementing." This is a violation.
+
+**This is not a grey area.** In `confirming` state, any tool call that reads project files, inspects running services, or examines the project environment is disallowed — whether the intent is "analysis" or "just looking." The state machine does not distinguish between read and write, between "planning" and "implementing," or between "gathering context" and "modifying."
+
+**Root cause:** The agent's desire to "be more helpful" by providing a more precise confirmation overrides the gate. The agent tells itself "I'll just do a quick check first, then confirm properly." This is the exact pattern that must stop.
+
+**Remedy:** Trust the state machine. If the confirmation would be imprecise without investigation, list the unknowns in the confirmation text and let the user decide. Do not investigate.
+
+## Post-Task: Obsidian Sync
+
+When the `code` skill's SKILL.md is modified (via CC, Codex, or direct edit), the Obsidian vault mirror must be updated:
+
+- Live: `~/.hermes/skills/software-development/code/SKILL.md`
+- Mirror: `~/Library/CloudStorage/OneDrive-个人/应用/remotely-save/Obsidian/Claw/AGENTS/code-skill.md`
+
+Sync workflow: read live bytes → write exact bytes to mirror → verify SHA-256 match. See the `hermes-agent-maintenance` skill for the full procedure.

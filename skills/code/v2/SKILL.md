@@ -166,12 +166,17 @@ If the probe fails twice, stop and ask the user — do not attempt a workaround 
 
 - Use `gh` for GitHub-facing repository work: authentication, status/inspection, branch and remote checks, pushes/pulls, PRs, releases, and API-backed queries.
 - Use raw `git` only for local plumbing that `gh` cannot express cleanly.
+- If `gh auth status` is healthy but `git push` still prompts, fails, or points at an awkward remote transport, run `gh auth setup-git` before retrying the push.
 
 ### Executor prompt content
 
 The prompt must include: confirmed scope, constraints, target path, forbidden actions, required mini-spec-kit phases, validation expectations, and final report format.
 
 For Claude Code, the prompt should also describe the internal dual-CC pattern (CC1: spec/plan/checklist/analyze, CC2: implement, CC1: reconcile) when the task benefits from context isolation.
+
+**Cleanup/follow-up dispatches**: When the task is fixing residual issues from a prior CC dispatch (e.g. infra config drift, stale ports, docker warnings), include an explicit stability constraint in the prompt: prioritize minimal, reversible changes over completeness. The user explicitly expects "不要改出问题" — no risk on cleanup work. Include `CRITICAL CONSTRAINT: Stability first. No risk.` at the top of the prompt body.
+
+**Multi-project discovery**: When the task spans multiple independent projects (web app + separate backend service in Docker), you may run preliminary `terminal` discovery commands in `executing` state before writing the dispatch prompt — e.g. `lsof -i :port`, `docker ps`, `find <path> -name "docker-compose*"` to locate project directories and check service status. Then dispatch CC from the primary project root (`cd` directory), and include all other project paths in the prompt body. CC can navigate between projects via `cd` in its own Bash calls.
 
 ## State: `awaiting`
 
@@ -209,6 +214,7 @@ The executor validates implementation and reports results. Hermes only forwards 
 - Changed files/modules
 - Checklist items completed or left open
 - Commands run and results
+- Validation must prove more than an HTTP 200: confirm the page renders correctly, the displayed data is correct, and the service is actually running and producing the expected data/output.
 - Build/test/deploy checks relevant to the change
 - Distinction between validated success and environment-blocked verification
 

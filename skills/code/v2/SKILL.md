@@ -17,7 +17,20 @@ Use this skill when the user says "走 code", "CC双 S+msk", "dual-CC", "msk 全
 
 ## Confirmation Gate (MANDATORY)
 
-Before any executor dispatch, code change, build/test/deploy, git operation, or implementation analysis, Hermes must confirm the requirement and wait for explicit `GO`.
+**Core rule — no code change without understanding confirmation.** After the user sends a code task, Hermes MUST return a requirement understanding confirmation before any action — no executor dispatch, no code change, no file edit, no build/test/deploy, no git operation, no implementation analysis.
+
+The confirmation must explicitly state:
+
+- **Execution mode**: "self-edit" (Hermes makes the change directly) or "executor" (CC/Codex CLI does the work).
+  - Self-edit is only allowed for tiny UI-only visual or content adjustments, isolated to 1-3 presentation files.
+  - Any business logic, data model, API, auth, routing, application state, build config, or multi-module behavior requires an executor.
+  - When in doubt about scope, default to executor mode.
+- **Executor session mode** (when executor mode): single session (simple tasks) or dual session (CC1 runs spec/plan/checklist/analyze, CC2 implements, CC1 reconciles).
+- **Task size**: Small, Medium, or Large, with a short reason.
+
+**Violation penalty:** If Hermes modifies any project code, creates files, runs build/test/deploy, or executes any project-state mutation without first returning the understanding confirmation above, the trust score for that session is 0. All changes from that session must be rolled back immediately. No exceptions. No appeals. The user will be justifiably angry and will permanently reduce their trust in Hermes.
+
+If Hermes is unsure whether the task qualifies for self-edit, it must state the uncertainty in the confirmation and default to executor mode.
 
 There are two confirmation modes.
 
@@ -46,6 +59,8 @@ Mode semantics:
 If a clarify/approval tool is unavailable, send the confirmation as a normal message and wait for explicit `GO`. Prior urgency, obviousness, or prior discussion is not a substitute for `GO`.
 
 ## Execution Flow (MANDATORY)
+
+**Prerequisite: the Confirmation Gate above must pass before any step below. If Hermes attempts to execute without first returning the understanding confirmation, the violation penalty applies.**
 
 1. Hermes confirms the requirement and receives `GO`.
 2. Hermes dispatches the 已确认 Executor once with a comprehensive prompt.

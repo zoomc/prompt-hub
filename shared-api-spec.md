@@ -1,7 +1,8 @@
 # Shared API Specification — BroZoomOut & ZoomLab
 
-> Version: 1.0 | Date: 2026-05-28
+> Version: 2.0 | Date: 2026-05-28
 > 目标：定义两个项目共用的所有 API 端点规范，覆盖同花顺/东方财富 70-80% 功能。
+> 与 ZoomLab v5.0 对齐，支持 6 大 Tab 页、30+ 页面、Dashboard 9 大模块。
 
 ---
 
@@ -16,6 +17,15 @@
 7. [板块热力图 API](#7-板块热力图-api)
 8. [K 线与技术指标 API](#8-k-线与技术指标-api)
 9. [宏观经济 API](#9-宏观经济-api)
+10. [Dashboard API](#10-dashboard-api)
+11. [A股/港股扩展 API](#11-a股港股扩展-api)
+12. [美股扩展 API](#12-美股扩展-api)
+13. [韩国股票 API](#13-韩国股票-api)
+14. [基金扩展 API](#14-基金扩展-api)
+15. [AI 分析扩展 API](#15-ai-分析扩展-api)
+16. [附录 A: 通用类型定义](#附录-a-通用类型定义)
+17. [附录 B: 限流状态码](#附录-b-限流状态码)
+18. [附录 C: 数据降级策略](#附录-c-数据降级策略)
 
 ---
 
@@ -95,6 +105,10 @@ Authorization: Bearer <jwt-token>
 | AI 分析结果 | `max-age=1800` | 30 分钟缓存 |
 | 历史快照 | `max-age=3600` | 1 小时缓存 |
 | 宏观数据 | `max-age=3600` | 1 小时缓存 |
+| Dashboard AI | `max-age=600` | 10 分钟缓存 |
+| 股东/分红/评级 | `max-age=3600` | 1 小时缓存 |
+| 融资融券/期权 | `max-age=60` | 1 分钟缓存 |
+| 大宗交易/做空 | `max-age=120` | 2 分钟缓存 |
 
 ### 1.5 限流策略
 
@@ -102,8 +116,12 @@ Authorization: Bearer <jwt-token>
 |---------|------|------|
 | 行情查询 | 60 req/min | 10 req/s |
 | AI 分析 | 10 req/min | 2 req/s |
+| AI 预测/推荐 | 10 req/min | 2 req/s |
+| AI 组合优化/压力测试 | 5 req/min | 1 req/s |
 | 写操作 | 30 req/min | 5 req/s |
 | 报告查询 | 120 req/min | 20 req/s |
+| Dashboard 查询 | 30 req/min | 5 req/s |
+| 板块/基金/股东查询 | 30 req/min | 5 req/s |
 
 ### 1.6 错误码体系
 
@@ -112,6 +130,26 @@ Authorization: Bearer <jwt-token>
 | `BROZOOMOUT_*` | BroZoomOut 核心错误 |
 | `MARKET_*` | 行情数据错误 |
 | `AI_*` | AI 分析错误 |
+| `AI_PREDICTION_*` | AI 预测错误 |
+| `AI_RISK_*` | AI 风险提示错误 |
+| `AI_OPPORTUNITY_*` | AI 机会信号错误 |
+| `AI_RECOMMENDATION_*` | AI 推荐错误 |
+| `AI_DECISION_*` | AI 决策错误 |
+| `AI_MULTI_PREDICTION_*` | AI 多时间维度预测错误 |
+| `AI_ANALYSIS_*` | AI 综合分析错误 |
+| `AI_OPTIMIZATION_*` | AI 组合优化错误 |
+| `AI_STRESS_TEST_*` | AI 压力测试错误 |
+| `SECTOR_*` | 板块数据错误 |
+| `SHAREHOLDER_*` | 股东信息错误 |
+| `DIVIDEND_*` | 分红送转错误 |
+| `MARGIN_*` | 融资融券错误 |
+| `BLOCK_TRADE_*` | 大宗交易错误 |
+| `INSTITUTIONAL_*` | 机构持仓错误 |
+| `ANALYST_*` | 分析师评级错误 |
+| `OPTIONS_*` | 期权链错误 |
+| `KR_*` | 韩国股票错误 |
+| `FUND_*` | 基金错误 |
+| `NEWS_*` | 新闻错误 |
 | `USER_*` | 用户数据错误 |
 | `RATE_LIMIT_*` | 限流错误 |
 
@@ -1291,6 +1329,1119 @@ GET /api/v1/health
   "uptime": 864000
 }
 ```
+
+---
+
+## 10. Dashboard API
+
+> 与 ZoomLab v5.0 Dashboard 9 大模块对齐
+
+### 10.1 AI 今日预测
+
+#### 端点
+
+```
+GET /api/v1/dashboard/ai-prediction
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "summary": "今日市场偏多，但需关注美联储议息会议结果。",
+    "confidence": 0.72,
+    "scenarios": {
+      "bullish": { "probability": 0.35, "target_price": 3450, "reasoning": "..." },
+      "base": { "probability": 0.45, "target_price": 3380, "reasoning": "..." },
+      "bearish": { "probability": 0.20, "target_price": 3280, "reasoning": "..." }
+    },
+    "key_factors": [
+      { "factor": "宏观经济政策", "weight": 0.35, "impact": "positive" },
+      { "factor": "美联储议息", "weight": 0.25, "impact": "neutral" },
+      { "factor": "北向资金", "weight": 0.20, "impact": "positive" }
+    ],
+    "disclaimer": "AI 预测仅供参考，不构成投资建议。",
+    "generated_at": "2026-05-28T09:30:00+08:00"
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: LLM (OpenAI API) + 历史行情 (yfinance) + 宏观数据
+- **缓存**: `max-age=600` (10 分钟)
+- **限流**: 10 req/min
+- **错误码**: `AI_PREDICTION_UNAVAILABLE`
+
+---
+
+### 10.2 AI 风险提示
+
+#### 端点
+
+```
+GET /api/v1/dashboard/ai-risks
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "risk_level": "medium",
+    "risk_score": 55,
+    "alerts": [
+      {
+        "id": "risk_001",
+        "type": "macro",
+        "severity": "high",
+        "title": "美联储议息会议结果不确定",
+        "description": "市场对加息预期存在分歧，可能导致波动加剧。",
+        "affected_markets": ["us_stock", "cn_stock"],
+        "affected_sectors": ["金融", "科技"],
+        "created_at": "2026-05-28T09:00:00+08:00"
+      }
+    ],
+    "trend": {
+      "direction": "rising",
+      "change_7d": 5,
+      "change_30d": 12
+    }
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: LLM 风险评估 + 市场情绪指标 + 历史风险事件
+- **缓存**: `max-age=300` (5 分钟)
+- **限流**: 10 req/min
+- **错误码**: `AI_RISK_UNAVAILABLE`
+
+---
+
+### 10.3 AI 机会信号
+
+#### 端点
+
+```
+GET /api/v1/dashboard/ai-opportunities
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "signals": [
+      {
+        "id": "opp_001",
+        "type": "sector_rotation",
+        "strength": "high",
+        "title": "半导体板块资金持续流入",
+        "description": "近5日半导体板块主力资金净流入超50亿，领涨股涨幅超8%。",
+        "related_stocks": ["002049", "603986"],
+        "confidence": 0.78,
+        "time_horizon": "short_term",
+        "created_at": "2026-05-28T09:15:00+08:00"
+      }
+    ],
+    "performance_history": {
+      "total_signals_30d": 45,
+      "win_rate": 0.62,
+      "avg_return": 2.3
+    }
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: LLM + 板块资金流向 + 技术指标
+- **缓存**: `max-age=300` (5 分钟)
+- **限流**: 10 req/min
+- **错误码**: `AI_OPPORTUNITY_UNAVAILABLE`
+
+---
+
+### 10.4 AI 推荐股票
+
+#### 端点
+
+```
+GET /api/v1/dashboard/ai-recommendations
+```
+
+#### 参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `market` | string | 否 | `all` | `all`/`cn`/`hk`/`us`/`kr` |
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "recommendations": [
+      {
+        "code": "600519",
+        "name": "贵州茅台",
+        "market": "cn_stock",
+        "recommendation": "strong_buy",
+        "confidence": 0.82,
+        "target_price": 1950,
+        "current_price": 1856.78,
+        "upside": 5.02,
+        "reasoning": "基本面稳健，估值合理，技术面偏多。",
+        "risk_level": "low",
+        "sector": "白酒",
+        "generated_at": "2026-05-28T09:30:00+08:00"
+      }
+    ],
+    "total": 10
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: LLM + 量化筛选 + 基本面/技术面分析
+- **缓存**: `max-age=300` (5 分钟)
+- **限流**: 10 req/min
+- **错误码**: `AI_RECOMMENDATION_UNAVAILABLE`
+
+---
+
+### 10.5 AI 买卖决策
+
+#### 端点
+
+```
+GET /api/v1/dashboard/ai-decisions
+```
+
+#### 参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `action` | string | 否 | `all` | `all`/`buy`/`sell`/`hold` |
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "decisions": [
+      {
+        "id": "dec_001",
+        "code": "600519",
+        "name": "贵州茅台",
+        "action": "buy",
+        "strength": "strong",
+        "entry_price": 1850,
+        "stop_loss": 1780,
+        "take_profit": 1980,
+        "risk_reward_ratio": 1.86,
+        "reasoning": "技术面突破均线压制，基本面稳健。",
+        "time_horizon": "1-2周",
+        "disclaimer": "仅供参考，不构成投资建议。",
+        "generated_at": "2026-05-28T09:30:00+08:00"
+      }
+    ],
+    "disclaimer": "所有决策由 AI 生成，仅供参考，不构成投资建议。投资有风险，入市需谨慎。"
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: LLM + 技术指标 + 资金流向
+- **缓存**: `max-age=300` (5 分钟)
+- **限流**: 10 req/min
+- **错误码**: `AI_DECISION_UNAVAILABLE`
+
+---
+
+### 10.6 近24小时新闻
+
+#### 端点
+
+```
+GET /api/v1/dashboard/news
+```
+
+#### 参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `category` | string | 否 | `all` | `all`/`macro`/`industry`/`company`/`anomaly` |
+| `hours` | int | 否 | `24` | 时间范围（小时） |
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "top_highlights": [
+      {
+        "id": "news_001",
+        "title": "美联储暗示9月可能降息",
+        "source": "cnbc_finance",
+        "importance": "major",
+        "sentiment": "bullish",
+        "summary": "美联储官员暗示9月可能降息，市场关注通胀数据。",
+        "affected_markets": ["us_stock"],
+        "published_at": "2026-05-28T14:30:00Z"
+      }
+    ],
+    "timeline": [
+      {
+        "time_group": "14:00-15:00",
+        "items": [ ... ]
+      }
+    ],
+    "stats": {
+      "total": 35,
+      "major": 3,
+      "notable": 12,
+      "general": 20
+    }
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: RSS (Google Finance / CNBC / FT) + AI 分级
+- **缓存**: `max-age=120` (2 分钟)
+- **限流**: 60 req/min
+- **错误码**: `NEWS_UNAVAILABLE`
+
+---
+
+## 11. A股/港股扩展 API
+
+### 11.1 板块热力图数据
+
+#### 端点
+
+```
+GET /api/v1/cn/sectors/heatmap
+```
+
+#### 参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `type` | string | 否 | `concept` | `concept`/`industry` |
+| `market` | string | 否 | `cn_stock` | `cn_stock`/`hk_stock` |
+
+#### 数据源
+
+- **数据源**: 新浪 `newFLJK` (概念板块) / AKShare (行业板块)
+- **缓存**: `max-age=300` (5 分钟)
+- **限流**: 30 req/min
+- **错误码**: `SECTOR_HEATMAP_UNAVAILABLE`
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "sectors": [
+      {
+        "code": "BK0655",
+        "name": "人工智能",
+        "change_percent": 3.45,
+        "volume": 12345678900,
+        "fund_flow": 567890123,
+        "stock_count": 156,
+        "up_count": 120,
+        "down_count": 30,
+        "leading_stock": { "code": "002230", "name": "科大讯飞", "change_percent": 5.67 },
+        "historical_return": { "1d": 3.45, "5d": 8.2, "1m": 15.6, "3m": 22.3 }
+      }
+    ],
+    "stats": { "up_count": 98, "down_count": 55, "flat_count": 10 },
+    "snapshot_time": "2026-05-28T15:30:00+08:00"
+  }
+}
+```
+
+---
+
+### 11.2 板块内个股
+
+#### 端点
+
+```
+GET /api/v1/cn/sectors/:code/stocks
+```
+
+#### 参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `code` | string | 是 | - | 板块代码 |
+| `sort_by` | string | 否 | `change_percent` | `change_percent`/`volume`/`fund_flow` |
+| `limit` | int | 否 | `20` | 返回数量 |
+
+#### 数据源
+
+- **数据源**: 东财板块成分股 API
+- **缓存**: `max-age=120` (2 分钟)
+- **限流**: 30 req/min
+- **错误码**: `SECTOR_STOCKS_UNAVAILABLE`
+
+---
+
+### 11.3 股东信息
+
+#### 端点
+
+```
+GET /api/v1/cn/stocks/:code/shareholders
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "600519",
+    "name": "贵州茅台",
+    "shareholders": [
+      {
+        "rank": 1,
+        "name": "贵州省人民政府国有资产监督管理委员会",
+        "shares": 562124800,
+        "percentage": 44.73,
+        "change": 0,
+        "type": "state"
+      }
+    ],
+    "top10_total_percentage": 72.56,
+    "change_quarter": "2026Q1"
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: 东财股东研究 API
+- **缓存**: `max-age=3600` (1 小时)
+- **限流**: 30 req/min
+- **错误码**: `SHAREHOLDER_UNAVAILABLE`
+
+---
+
+### 11.4 分红送转
+
+#### 端点
+
+```
+GET /api/v1/cn/stocks/:code/dividends
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "600519",
+    "dividends": [
+      {
+        "year": "2025",
+        "dividend_per_share": 27.25,
+        "bonus_shares": 0,
+        "record_date": "2026-06-15",
+        "payment_date": "2026-06-30",
+        "dividend_yield": 1.47
+      }
+    ],
+    "consecutive_years": 20,
+    "avg_dividend_yield": 1.8
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: 东财分红送转 API
+- **缓存**: `max-age=3600` (1 小时)
+- **限流**: 30 req/min
+- **错误码**: `DIVIDEND_UNAVAILABLE`
+
+---
+
+### 11.5 融资融券
+
+#### 端点
+
+```
+GET /api/v1/cn/stocks/:code/margin
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "600519",
+    "margin_buy_balance": 1234567890,
+    "margin_sell_balance": 567890123,
+    "net_balance": 666677767,
+    "trend": "increasing",
+    "history": [
+      { "date": "2026-05-27", "buy": 1200000000, "sell": 550000000 },
+      { "date": "2026-05-28", "buy": 1234567890, "sell": 567890123 }
+    ]
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: 东财融资融券 API
+- **缓存**: `max-age=60` (1 分钟)
+- **限流**: 60 req/min
+- **错误码**: `MARGIN_UNAVAILABLE`
+
+---
+
+### 11.6 大宗交易
+
+#### 端点
+
+```
+GET /api/v1/cn/stocks/:code/block-trades
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "600519",
+    "trades": [
+      {
+        "date": "2026-05-28",
+        "price": 1850.00,
+        "volume": 10000,
+        "amount": 18500000,
+        "buyer": "机构专用",
+        "seller": "机构专用",
+        "premium_discount": -0.36
+      }
+    ],
+    "summary": {
+      "total_trades_5d": 8,
+      "total_amount_5d": 150000000,
+      "net_buy": true
+    }
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: 东财大宗交易 API
+- **缓存**: `max-age=120` (2 分钟)
+- **限流**: 30 req/min
+- **错误码**: `BLOCK_TRADE_UNAVAILABLE`
+
+---
+
+## 12. 美股扩展 API
+
+### 12.1 机构持仓 (13F)
+
+#### 端点
+
+```
+GET /api/v1/us/stocks/:code/institutional
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "AAPL",
+    "name": "Apple Inc.",
+    "holdings": [
+      {
+        "institution": "Berkshire Hathaway",
+        "shares": 89464800,
+        "percentage": 0.58,
+        "change_quarterly": 2.3,
+        "value_usd": 17892960000,
+        "filing_date": "2026-05-15"
+      }
+    ],
+    "top10_total_percentage": 32.5,
+    "institutional_ownership": 60.2
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: SEC EDGAR 13F Filing + Finnhub
+- **缓存**: `max-age=3600` (1 小时)
+- **限流**: 30 req/min
+- **错误码**: `INSTITUTIONAL_UNAVAILABLE`
+
+---
+
+### 12.2 分析师评级
+
+#### 端点
+
+```
+GET /api/v1/us/stocks/:code/analysts
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "AAPL",
+    "analyst_count": 35,
+    "consensus": "buy",
+    "average_target": 210.50,
+    "high_target": 250.00,
+    "low_target": 165.00,
+    "ratings": {
+      "strong_buy": 12,
+      "buy": 15,
+      "hold": 6,
+      "sell": 2,
+      "strong_sell": 0
+    },
+    "recent_changes": [
+      {
+        "analyst": "Morgan Stanley",
+        "from": "hold",
+        "to": "overweight",
+        "target_from": 195,
+        "target_to": 220,
+        "date": "2026-05-25"
+      }
+    ]
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: Finnhub Analyst API + MarketBeat
+- **缓存**: `max-age=3600` (1 小时)
+- **限流**: 30 req/min
+- **错误码**: `ANALYST_UNAVAILABLE`
+
+---
+
+### 12.3 期权链
+
+#### 端点
+
+```
+GET /api/v1/us/stocks/:code/options
+```
+
+#### 参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `expiry` | string | 否 | `nearest` | 到期日 |
+| `type` | string | 否 | `all` | `all`/`call`/`put` |
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "AAPL",
+    "current_price": 200.85,
+    "expiry_dates": ["2026-06-20", "2026-07-18", "2026-08-15"],
+    "options": [
+      {
+        "strike": 200,
+        "expiry": "2026-06-20",
+        "type": "call",
+        "bid": 5.20,
+        "ask": 5.35,
+        "last": 5.25,
+        "volume": 12345,
+        "open_interest": 45678,
+        "implied_volatility": 0.28,
+        "delta": 0.52,
+        "gamma": 0.03,
+        "theta": -0.08
+      }
+    ]
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: CBOE + Yahoo Finance Options
+- **缓存**: `max-age=60` (1 分钟)
+- **限流**: 60 req/min
+- **错误码**: `OPTIONS_UNAVAILABLE`
+
+---
+
+## 13. 韩国股票 API
+
+### 13.1 外国投资者持股
+
+#### 端点
+
+```
+GET /api/v1/kr/stocks/:code/foreign-investors
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "005930",
+    "name": "Samsung Electronics",
+    "foreign_ownership": 55.2,
+    "foreign_shares": 3298000000,
+    "change_1d": -0.3,
+    "change_5d": 1.2,
+    "change_1m": -2.5,
+    "trend": "decreasing",
+    "history": [
+      { "date": "2026-05-27", "ownership": 55.5 },
+      { "date": "2026-05-28", "ownership": 55.2 }
+    ]
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: KRX 外国投资者持股 API
+- **缓存**: `max-age=120` (2 分钟)
+- **限流**: 30 req/min
+- **错误码**: `KR_FOREIGN_HOLDING_UNAVAILABLE`
+
+---
+
+### 13.2 做空数据
+
+#### 端点
+
+```
+GET /api/v1/kr/stocks/:code/short-selling
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "005930",
+    "short_volume": 12345678,
+    "short_ratio": 2.5,
+    "short_balance": 6789012345,
+    "change_1d": 5.6,
+    "trend": "increasing",
+    "history": [
+      { "date": "2026-05-27", "volume": 11000000, "ratio": 2.2 },
+      { "date": "2026-05-28", "volume": 12345678, "ratio": 2.5 }
+    ]
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: KRX 做空数据 API
+- **缓存**: `max-age=60` (1 分钟)
+- **限流**: 60 req/min
+- **错误码**: `KR_SHORT_SELLING_UNAVAILABLE`
+
+---
+
+## 14. 基金扩展 API
+
+### 14.1 基金经理信息
+
+#### 端点
+
+```
+GET /api/v1/funds/:code/manager
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "110011",
+    "managers": [
+      {
+        "name": "张坤",
+        "title": "基金经理",
+        "start_date": "2020-01-15",
+        "experience": "8年",
+        "managed_funds": 3,
+        "total_aum": 56789012345,
+        "career_return": 45.6,
+        "sharpe_ratio": 1.45,
+        "max_drawdown": -18.5,
+        "best_performing_fund": "易方达蓝筹精选",
+        "best_return": 67.8
+      }
+    ]
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: 天天基金 基金经理 API
+- **缓存**: `max-age=3600` (1 小时)
+- **限流**: 30 req/min
+- **错误码**: `FUND_MANAGER_UNAVAILABLE`
+
+---
+
+### 14.2 基金评级
+
+#### 端点
+
+```
+GET /api/v1/funds/:code/ratings
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "110011",
+    "ratings": {
+      "晨星": { "overall": 4, "return": 4, "risk": 3 },
+      "银河": { "overall": 5, "return": 5, "risk": 4 },
+      "海通": { "overall": 4, "return": 4, "risk": 4 }
+    },
+    "sharpe_ratio": 1.23,
+    "max_drawdown": -12.34,
+    "sortino_ratio": 1.56,
+    "information_ratio": 0.89
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: 天天基金 + 晨星中国
+- **缓存**: `max-age=3600` (1 小时)
+- **限流**: 30 req/min
+- **错误码**: `FUND_RATING_UNAVAILABLE`
+
+---
+
+### 14.3 机构持有比例
+
+#### 端点
+
+```
+GET /api/v1/funds/:code/institutional
+```
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "110011",
+    "institutional_holding": 35.6,
+    "individual_holding": 64.4,
+    "top_institutions": [
+      {
+        "name": "中国工商银行",
+        "percentage": 8.5,
+        "shares": 123456789,
+        "change_quarterly": 1.2
+      }
+    ],
+    "change_quarterly": 2.5,
+    "trend": "increasing"
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: 天天基金 基金持有人 API
+- **缓存**: `max-age=3600` (1 小时)
+- **限流**: 30 req/min
+- **错误码**: `FUND_INSTITUTIONAL_UNAVAILABLE`
+
+---
+
+## 15. AI 分析扩展 API
+
+### 15.1 多时间维度预测
+
+#### 端点
+
+```
+GET /api/v1/ai/prediction/multi-timeframe
+```
+
+#### 参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `code` | string | 是 | - | 股票代码 |
+| `market` | string | 否 | `cn_stock` | 市场 |
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "600519",
+    "name": "贵州茅台",
+    "predictions": {
+      "1d": {
+        "direction": "up",
+        "change_percent": 1.2,
+        "confidence": 0.75,
+        "target_price": 1879.26,
+        "reasoning": "技术面突破均线压制，短期偏多。"
+      },
+      "1w": {
+        "direction": "up",
+        "change_percent": 3.5,
+        "confidence": 0.68,
+        "target_price": 1921.77,
+        "reasoning": "基本面稳健，市场情绪好转。"
+      },
+      "1m": {
+        "direction": "up",
+        "change_percent": 8.2,
+        "confidence": 0.62,
+        "target_price": 2009.03,
+        "reasoning": "中长期看好白酒消费升级趋势。"
+      },
+      "3m": {
+        "direction": "neutral",
+        "change_percent": 2.5,
+        "confidence": 0.55,
+        "target_price": 1903.20,
+        "reasoning": "需关注宏观经济和政策变化。"
+      }
+    }
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: LLM + 历史行情 + 技术指标
+- **缓存**: `max-age=600` (10 分钟)
+- **限流**: 10 req/min
+- **错误码**: `AI_MULTI_PREDICTION_UNAVAILABLE`
+
+---
+
+### 15.2 综合分析评分
+
+#### 端点
+
+```
+GET /api/v1/ai/analysis/comprehensive
+```
+
+#### 参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `code` | string | 是 | - | 股票代码 |
+| `market` | string | 否 | `cn_stock` | 市场 |
+
+#### 响应格式
+
+```json
+{
+  "data": {
+    "code": "600519",
+    "name": "贵州茅台",
+    "overall_score": 78,
+    "dimensions": {
+      "technical": { "score": 82, "signal": "bullish", "details": "..." },
+      "fundamental": { "score": 85, "signal": "strong", "details": "..." },
+      "fund_flow": { "score": 70, "signal": "neutral", "details": "..." },
+      "news": { "score": 75, "signal": "positive", "details": "..." }
+    },
+    "radar_chart": {
+      "technical": 82,
+      "fundamental": 85,
+      "fund_flow": 70,
+      "news": 75,
+      "valuation": 68
+    },
+    "recommendation": "buy",
+    "confidence": 0.78,
+    "generated_at": "2026-05-28T15:30:00+08:00"
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: LLM + 技术指标 + 基本面数据 + 资金流向 + 新闻
+- **缓存**: `max-age=600` (10 分钟)
+- **限流**: 10 req/min
+- **错误码**: `AI_ANALYSIS_UNAVAILABLE`
+
+---
+
+### 15.3 组合优化建议
+
+#### 端点
+
+```
+POST /api/v1/ai/portfolio/optimize
+```
+
+#### 请求
+
+```json
+{
+  "positions": [
+    { "code": "600519", "market": "cn_stock", "weight": 25 },
+    { "code": "000858", "market": "cn_stock", "weight": 15 },
+    { "code": "601318", "market": "cn_stock", "weight": 20 }
+  ],
+  "risk_profile": "balanced",
+  "constraints": {
+    "max_single_weight": 30,
+    "min_single_weight": 5,
+    "target_return": null
+  }
+}
+```
+
+#### 响应
+
+```json
+{
+  "data": {
+    "current_portfolio": {
+      "expected_return": 12.5,
+      "volatility": 18.3,
+      "sharpe_ratio": 0.68,
+      "max_drawdown": -22.5
+    },
+    "optimized_portfolio": {
+      "expected_return": 14.2,
+      "volatility": 16.8,
+      "sharpe_ratio": 0.85,
+      "max_drawdown": -18.2
+    },
+    "rebalance_suggestions": [
+      {
+        "code": "600519",
+        "name": "贵州茅台",
+        "current_weight": 25,
+        "suggested_weight": 30,
+        "action": "increase",
+        "reasoning": "基本面稳健，估值合理，建议增配。"
+      }
+    ],
+    "efficient_frontier": [
+      { "risk": 12.5, "return": 8.5 },
+      { "risk": 15.0, "return": 11.2 },
+      { "risk": 18.0, "return": 14.0 }
+    ],
+    "disclaimer": "组合优化仅供参考，不构成投资建议。"
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: LLM + 历史收益率 + 协方差矩阵
+- **缓存**: 无（POST 请求）
+- **限流**: 5 req/min
+- **错误码**: `AI_OPTIMIZATION_UNAVAILABLE`
+
+---
+
+### 15.4 压力测试
+
+#### 端点
+
+```
+POST /api/v1/ai/portfolio/stress-test
+```
+
+#### 请求
+
+```json
+{
+  "positions": [
+    { "code": "600519", "market": "cn_stock", "weight": 25 },
+    { "code": "000858", "market": "cn_stock", "weight": 15 }
+  ],
+  "scenarios": ["market_crash", "rate_hike", "sector_rotation", "custom"]
+}
+```
+
+#### 响应
+
+```json
+{
+  "data": {
+    "results": {
+      "market_crash": {
+        "name": "市场崩盘",
+        "description": "大盘下跌20%，波动率翻倍",
+        "portfolio_impact": -18.5,
+        "worst_stock": { "code": "000858", "impact": -22.3 },
+        "recovery_days": 45,
+        "var_95": -15.2
+      },
+      "rate_hike": {
+        "name": "加息25bp",
+        "description": "央行加息25个基点",
+        "portfolio_impact": -5.2,
+        "worst_stock": { "code": "601318", "impact": -8.5 },
+        "recovery_days": 15,
+        "var_95": -4.8
+      }
+    },
+    "correlation_matrix": {
+      "600519": { "000858": 0.85, "601318": 0.42 },
+      "000858": { "600519": 0.85, "601318": 0.38 },
+      "601318": { "600519": 0.42, "000858": 0.38 }
+    },
+    "disclaimer": "压力测试结果仅供参考，实际市场情况可能与模拟情景存在差异。"
+  }
+}
+```
+
+#### 数据源
+
+- **数据源**: LLM + 历史收益率 + 情景模拟
+- **缓存**: 无（POST 请求）
+- **限流**: 5 req/min
+- **错误码**: `AI_STRESS_TEST_UNAVAILABLE`
 
 ---
 

@@ -64,9 +64,11 @@
     64|app/jobs/sector_scan_job.py             # 定时扫描任务
     65|```
     66|
-    67|**数据源**：腾讯财经 HTTP API
-    68|- 行业板块：`http://qt.gtimg.cn/q=sh000001`（免翻墙、免 key、Docker 友好）
-    69|- 备选：东方财富 push2.eastmoney.com（需 Surge DIRECT 规则）
+    **数据源**：新浪 `newFLJK` API（已验证可用）
+    - 概念板块：`https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Service.getHQNodeStockCount?node=new_FLJK`
+    - 返回 163 个概念板块，含涨跌幅、领涨股
+    - 无反爬限制，Docker 直达
+    - **替代东财被封的 push2.eastmoney.com/clist**
     70|
     71|**API 设计**：
     72|```
